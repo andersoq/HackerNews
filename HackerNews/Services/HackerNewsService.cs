@@ -9,6 +9,8 @@ namespace HackerNews.Services
         private readonly HttpClient _httpClient;
         private readonly HybridCache _hybridCache;
         private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
+        private static readonly SemaphoreSlim _semaphore = new SemaphoreSlim(5);
+
 
 
         public HackerNewsService(HttpClient httpClient, HybridCache hybridCache)
@@ -37,7 +39,19 @@ namespace HackerNews.Services
             var idsResponse = await _httpClient.GetStringAsync(bestStoriesUrl);
             var selectedIds = JsonSerializer.Deserialize<List<int>>(idsResponse);
 
-            var tasks = selectedIds.Take(n).Select(GetStoryAsync);
+            var tasks = selectedIds.Take(n).Select(async id =>
+            {
+                await _semaphore.WaitAsync();
+                try
+                {
+                    return await GetStoryAsync(id);
+                }
+                finally
+                {
+                    _semaphore.Release();
+                }
+            });
+
             var stories = await Task.WhenAll(tasks);
 
             return stories
