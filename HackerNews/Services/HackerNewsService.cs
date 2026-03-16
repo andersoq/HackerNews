@@ -1,4 +1,5 @@
 ﻿using HackerNews.Models;
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
 
 namespace HackerNews.Services
@@ -6,24 +7,35 @@ namespace HackerNews.Services
     public class HackerNewsService : IHackerNewsService
     {
         private readonly HttpClient _httpClient;
+        private readonly IMemoryCache _cache;
+        private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
-        public HackerNewsService(HttpClient httpClient)
+        public HackerNewsService(HttpClient httpClient, IMemoryCache cache)
         {
             _httpClient = httpClient;
+            _cache = cache;
         }
 
         public async Task<IEnumerable<StoryDto>> GetBestStoriesAsync(int n)
         {
-            var bestStoriesUrl = "https://hacker-news.firebaseio.com/v0/beststories.json";
+            var cacheKey = $"BestStories_{n}";
 
+            // Try to get cached stories
+            if (_cache.TryGetValue(cacheKey, out IEnumerable<StoryDto> cachedStories))
+            {
+                return cachedStories;
+            }
+
+            // If not in cache, fetch from API
+            var bestStoriesUrl = "https://hacker-news.firebaseio.com/v0/beststories.json";
             var idsResponse = await _httpClient.GetStringAsync(bestStoriesUrl);
             var ids = JsonSerializer.Deserialize<List<int>>(idsResponse);
-
             var selectedIds = ids.Take(n);
-
             var tasks = selectedIds.Select(GetStoryAsync);
-
             var stories = await Task.WhenAll(tasks);
+
+            // Cache the fetched stories
+            _cache.Set(cacheKey, stories, CacheDuration);
 
             return stories
                 .Where(s => s != null)
