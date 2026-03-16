@@ -1,5 +1,5 @@
 ﻿using HackerNews.Models;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using System.Text.Json;
 
 namespace HackerNews.Services
@@ -7,39 +7,43 @@ namespace HackerNews.Services
     public class HackerNewsService : IHackerNewsService
     {
         private readonly HttpClient _httpClient;
-        private readonly IMemoryCache _cache;
+        private readonly HybridCache _hybridCache;
         private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
-        public HackerNewsService(HttpClient httpClient, IMemoryCache cache)
+
+        public HackerNewsService(HttpClient httpClient, HybridCache hybridCache)
         {
             _httpClient = httpClient;
-            _cache = cache;
+            _hybridCache = hybridCache;
         }
 
         public async Task<IEnumerable<StoryDto>> GetBestStoriesAsync(int n)
         {
             var cacheKey = $"BestStories_{n}";
 
-            // Try to get cached stories
-            if (_cache.TryGetValue(cacheKey, out IEnumerable<StoryDto> cachedStories))
-            {
-                return cachedStories;
-            }
+            return await _hybridCache.GetOrCreateAsync(
+                cacheKey,
+                async _ => await FetchBestStoriesAsync(n),
+                new HybridCacheEntryOptions
+                {
+                    Expiration = CacheDuration
+                }
+            ) ?? Enumerable.Empty<StoryDto>();
+        }
 
-            // If not in cache, fetch from API
+        private async Task<IEnumerable<StoryDto>> FetchBestStoriesAsync(int n)
+        {
             var bestStoriesUrl = "https://hacker-news.firebaseio.com/v0/beststories.json";
             var idsResponse = await _httpClient.GetStringAsync(bestStoriesUrl);
-            var ids = JsonSerializer.Deserialize<List<int>>(idsResponse);
-            var selectedIds = ids.Take(n);
-            var tasks = selectedIds.Select(GetStoryAsync);
-            var stories = await Task.WhenAll(tasks);
+            var selectedIds = JsonSerializer.Deserialize<List<int>>(idsResponse);
 
-            // Cache the fetched stories
-            _cache.Set(cacheKey, stories, CacheDuration);
+            var tasks = selectedIds.Take(n).Select(GetStoryAsync);
+            var stories = await Task.WhenAll(tasks);
 
             return stories
                 .Where(s => s != null)
-                .OrderByDescending(s => s.Score);
+                .OrderByDescending(s => s.Score)
+                .ToList();
         }
 
         private async Task<StoryDto> GetStoryAsync(int id)
