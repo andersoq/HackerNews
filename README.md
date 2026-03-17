@@ -53,6 +53,7 @@ Returns the first `n` best stories, sorted by score (descending).
 
 ## How It Works
 
-- **Caching**: Responses are cached for 5 minutes to reduce load on the Hacker News API while keeping data reasonably fresh.
-- **Rate Limiting**: No more than 5 requests run concurrently to avoid overwhelming the API.
-- **Parallel Fetching**:Story details are fetched simultaneously for faster performance.
+- **Caching**: Results cached for 5 minutes to reduce API load
+- **Rate Limiting**: Maximum 5 concurrent requests to avoid overwhelming the API
+- **Retry Logic**: Automatic retries failed requests
+- **Parallel Fetching**: Story details fetched concurrently for better performance
