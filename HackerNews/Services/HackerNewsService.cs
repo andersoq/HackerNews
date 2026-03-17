@@ -75,7 +75,7 @@ namespace HackerNews.Services
                 Title = item.title,
                 Uri = item.url,
                 PostedBy = item.by,
-                Time = DateTimeOffset.FromUnixTimeSeconds(item.time).DateTime,
+                Time = DateTimeOffset.FromUnixTimeSeconds(item.time),
                 Score = item.score,
                 CommentCount = item.descendants
             };
